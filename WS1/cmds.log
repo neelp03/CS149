@@ -1,0 +1,12 @@
+    1  pwd
+    2  cd ~
+    3  cd Desktop/
+    4  ls -latr; mkdir CS149; cd CS149
+    5  git init
+    6  git remote add origin https://github.com/neelp03/CS149.git
+    7  mkdir WS1
+    8  cd WS1
+    9  git add .
+   10  wget -O out.pdf https://tinyurl.com/yy94jltt
+   11  ls -latr
+   12  history > cmds.log

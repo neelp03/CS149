@@ -9,7 +9,7 @@
 #include <stdio.h>
 
 /**
- * This function prints a no parking sign" 
+ * This function prints a no parking sign
  * Assumption: none
  * Input parameters: none
  * Returns: an integer

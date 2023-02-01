@@ -2,8 +2,8 @@
  * Description: Exercise 1.20 from Zybooks
  * Author names: Neel Patel, Megan Ju
  * Author emails: neel.patel@sjsu.edu; megan.ju@sjsu.edu
- * Last modified date: 02/01/2023
- * Creation date: 02/01/2023
+ * Last modified date: February 1, 2023
+ * Creation date: February 1, 2023
  **/
 
 

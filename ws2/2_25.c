@@ -1,5 +1,5 @@
 /**
- * Description: Exercise 2.12 from Zybooks
+ * Description: Exercise 2.25 from Zybooks
  * Author names: Neel Patel, Megan Ju
  * Author emails: neel.patel@sjsu.edu; megan.ju@sjsu.edu
  * Last modified date: February 8, 2023

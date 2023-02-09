@@ -21,6 +21,7 @@ int main(void) {
 	int x;
 	scanf("%d", &user_num);
 	scanf("%d", &x);
-	printf("%d %d %d", user_num/x, user_num/x/x, user_num/x/x/x);
+	printf("%d %d %d \n", user_num/x, user_num/x/x, user_num/x/x/x);
+	return 0;
 }
 

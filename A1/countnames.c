@@ -61,7 +61,9 @@ int main(int argc, char *argv[]) {
     }
 
     // Remove the newline character from the name
-    name[length - 1] = '\0';
+    if (name[strlen(name) - 1] == '\n') {
+    	name[strlen(name) - 1] = '\0';
+    }
 
     // Check if the name already exists in the names array
     int existing_name = 0;
@@ -76,8 +78,8 @@ int main(int argc, char *argv[]) {
 
     // If the name does not exist in the names array, add it to the array
     if (!existing_name) {
-      strcpy(names[name_count], name);
-      counts[name_count] = 1;
+      strcpy(names[name_count], name);	// copy current name into the names list
+      counts[name_count] = 1;	// update count of this name
       name_count++;
     }
   }

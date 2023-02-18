@@ -3,7 +3,7 @@
  * Author names: Megan Ju, Neel Patel
  * Author emails: megan.ju@sjsu.edu, neel.patel@sjsu.edu
  * Last modified date: February 14, 2023
- * Creation date: February 14, 2023
+ * Creation date: February 17, 2023
  **/
  
 #include <stdio.h>
@@ -52,8 +52,5 @@
  	
  	printf("\n");
  	return 0;
- 	
- 	
- 
  
  }

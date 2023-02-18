@@ -1,15 +1,16 @@
 /**
- * Description: Exercise 5.22 - "Contains the character" from Zybooks
+ * Description: Exercise 5.22 - "Element in Range" from Zybooks
  * Author names: Megan Ju, Neel Patel
  * Author emails: megan.ju@sjsu.edu, neel.patel@sjsu.edu
- * Last modified date: February 15, 2023
+ * Last modified date: February 17, 2023
  * Creation date: February 15, 2023
  **/
  
 #include <stdio.h>
 
 /**
- * Description: 
+ * Description: This function prints out all numbers
+ * that are in range of two given numbers (inclusive)
  * Input parameters: none
  * Returns: an integer
  **/

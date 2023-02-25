@@ -1,0 +1,9 @@
+    1  pwd 
+    2  pstree
+    3  ps -a -f -x
+    4  ps -a -f -x | more
+    5  top
+    6  man kill
+    7  echo $?
+    8  echo $$
+    9  history > worksheet4.log

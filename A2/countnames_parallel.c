@@ -129,9 +129,11 @@ int main(int argc, char *argv[])
             }
         }
     }
+    // Iterate over name_counts and print final counts for each name
     for (int i = 0; i < num_names; i++)
     {
-        printf("%s:%d\n", names[i], counts[i]);
+        printf("%s:%d\n", name_counts[i].name, name_counts[i].count);
     }
+
     return 0;
 }

@@ -4,11 +4,12 @@
  * Author email: neel.patel01@sjsu.edu; megan.ju@sjsu.edu
  * Last modified date: March 2, 2023
  * Creation date: March 2, 2023
- **/#include <stdio.h>
+ **/
+#include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <string.h>
 #include <sys/wait.h>
+#include <string.h>
 
 #define MAX_NAME_LENGTH 30
 #define MAX_NAMES 100
@@ -90,17 +91,11 @@ int count_names_in_file(char *file_name, int *name_counts) {
   return 0;
 }
 
-/**
- * Main function for counting name occurrences in multiple files
- * Assumption: none
- * Input parameters: argc, argv
- * Returns: 0 if successful, 1 if there was an error
-**/
 int main(int argc, char *argv[]) {
-    int i, j, pid, status;
-    int name_counts[MAX_NAMES * 2] = {0}; // initialize to 0
-    int total_counts[MAX_NAMES] = {0}; // initialize to 0
+    int name_counts[MAX_NAMES * 2] = {0};
     int pipefd[2];
+    pid_t pid;
+    int i, j;
 
     if (pipe(pipefd) == -1) {
         perror("pipe");
@@ -109,41 +104,54 @@ int main(int argc, char *argv[]) {
 
     for (i = 1; i < argc; i++) {
         pid = fork();
+
         if (pid == -1) {
             perror("fork");
             exit(EXIT_FAILURE);
         } else if (pid == 0) {
             // Child process
-            close(pipefd[0]); // Close the read end of the pipe
-            int ret = count_names_in_file(argv[i], name_counts);
-            if (ret != 0) {
-                fprintf(stderr, "Error counting names in file %s\n", argv[i]);
+            int *child_name_counts = calloc(MAX_NAMES * 2, sizeof(int));
+
+            if (!child_name_counts) {
+                perror("calloc");
                 exit(EXIT_FAILURE);
             }
-            // Write the name counts to the parent process through the pipe
-            write(pipefd[1], name_counts, MAX_NAMES * 2 * sizeof(int));
-            close(pipefd[1]); // Close the write end of the pipe
+
+            int count = count_names_in_file(argv[i], child_name_counts);
+
+            write(pipefd[1], child_name_counts, MAX_NAMES * 2 * sizeof(int));
+            write(pipefd[1], &count, sizeof(int));
+
+            free(child_name_counts);
             exit(EXIT_SUCCESS);
-        } else {
-            // Parent process
-            close(pipefd[1]); // Close the write end of the pipe
-            wait(&status);
-            if (WIFEXITED(status) && WEXITSTATUS(status) == EXIT_SUCCESS) {
-                // Read the name counts from the child process
-                read(pipefd[0], name_counts, MAX_NAMES * 2 * sizeof(int));
-                // Accumulate the name counts across all files
-                for (j = 0; j < MAX_NAMES; j++) {
-                    total_counts[j] += name_counts[j * 2 + 1];
-                }
-            }
-            close(pipefd[0]); // Close the read end of the pipe
         }
     }
 
-    // Print the collective number of names across all files
-    for (j = 0; j < MAX_NAMES; j++) {
-        if (total_counts[j] > 0) {
-            printf("%s: %d\n", (char*)name_counts[j*2], total_counts[j]);
+    // Parent process
+    for (i = 1; i < argc; i++) {
+        int child_name_counts[MAX_NAMES * 2] = {0};
+        int count;
+
+        read(pipefd[0], child_name_counts, MAX_NAMES * 2 * sizeof(int));
+        read(pipefd[0], &count, sizeof(int));
+
+        for (j = 0; j < count; j++) {
+            int name_index = child_name_counts[j * 2];
+            int name_count = child_name_counts[j * 2 + 1];
+
+            name_counts[name_index] += name_count;
+        }
+
+        wait(NULL);
+    }
+
+    close(pipefd[0]);
+    close(pipefd[1]);
+
+    // Print name counts
+    for (i = 0; i < MAX_NAMES; i++) {
+        if (name_counts[i * 2] != 0) {
+            printf("%s: %d\n", (char *)&name_counts[i * 2], name_counts[i * 2 + 1]);
         }
     }
 

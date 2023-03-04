@@ -1,158 +1,145 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
 #include <string.h>
+#include <unistd.h>
 #include <sys/wait.h>
 
-#define MAX_NAMES 1000
-#define MAX_NAME_LENGTH 50
+#define MAX_NAME_LEN 100
+#define MAX_FILES 10
 
-int count_names(const char *filename, char names[][MAX_NAME_LENGTH], int counts[], int *name_count);
-int find_name_index(char names[][MAX_NAME_LENGTH], int name_count, const char *name, int *index);
+struct name_count {
+    char name[MAX_NAME_LEN];
+    int count;
+};
 
 int main(int argc, char *argv[]) {
-  // Check the number of arguments passed to the program
-  // If the number of arguments is not 2 or more, then print an error message and return 1
-  if (argc < 2) {
-    fprintf(stderr, "Error: Incorrect number of arguments.\n");
-    return 1;
-  }
-
-  // Declare two arrays to store names and their counts
-  char names[MAX_NAMES][MAX_NAME_LENGTH];
-  int counts[MAX_NAMES];
-  int name_count = 0;
-
-  // Create a pipe for each child process to write the result back to the parent process
-  int num_pipes = argc - 1;
-  int pipes[num_pipes][2];
-  for (int i = 0; i < num_pipes; i++) {
-    if (pipe(pipes[i]) == -1) {
-      perror("Error creating pipe");
-      exit(1);
-    }
-  }
-
-  // Fork a child process for each file
-  for (int i = 1; i < argc; i++) {
-    pid_t pid = fork();
-    if (pid == -1) {
-      perror("Error forking process");
-      exit(1);
-    } else if (pid == 0) {
-      // Child process
-
-      // Close the read end of the pipe
-      close(pipes[i - 1][0]);
-
-      // Count the names in the file
-      int name_count_child = 0;
-      int counts_child[MAX_NAMES];
-      char names_child[MAX_NAMES][MAX_NAME_LENGTH];
-      int ret = count_names(argv[i], names_child, counts_child, &name_count_child);
-
-      // If there was an error, write 1 to the pipe and exit
-      if (ret != 0) {
-        write(pipes[i - 1][1], "1", 1);
+    int num_files = argc - 1;
+    if (num_files > MAX_FILES) {
+        fprintf(stderr, "Error: too many files (maximum %d)\n", MAX_FILES);
         exit(1);
-      }
-
-      // Write the count data to the pipe
-      char buffer[MAX_NAMES * (MAX_NAME_LENGTH + 4)]; // Allocate enough memory to hold all the data
-      int bytes_written = 0;
-      for (int j = 0; j < name_count_child; j++) {
-        bytes_written += sprintf(buffer + bytes_written, "%s: %d\n", names_child[j], counts_child[j]);
-      }
-      write(pipes[i - 1][1], buffer, bytes_written);
-
-      // Close the write end of the pipe and exit
-      close(pipes[i - 1][1]);
-      exit(0);
-    } else {
-      // Parent process
-
-      // Close the write end of the pipe
-      close(pipes[i - 1][1]);
-
-      // Wait for the child process to exit and read the count data from the pipe
-      wait(NULL);
-      char buffer[MAX_NAMES * (MAX_NAME_LENGTH + 4)]; // Allocate enough memory to hold all the data
-      int bytes_read = read(pipes[i - 1][0], buffer, sizeof(buffer));
-      buffer[bytes_read] = '\0';
-
-      // Check if the child process returned an error
-int status;
-if (waitpid(pid, &status, 0) == -1) {
-perror("Error waiting for child process");
-exit(1);
-}
-if (WIFEXITED(status) && WEXITSTATUS(status) == 1) {
-fprintf(stderr, "Error: Unable to count names in file %s\n", argv[i]);
-continue;
-}
-  // Parse the count data from the buffer and update the global counts
-  char *line = strtok(buffer, "\n");
-  while (line != NULL) {
-    char *name = strtok(line, ": ");
-    int count = atoi(strtok(NULL, ": "));
-    int index;
-    if (find_name_index(names, name_count, name, &index) == 0) {
-      counts[index] += count;
-    } else {
-      strncpy(names[name_count], name, MAX_NAME_LENGTH);
-      counts[name_count] = count;
-      name_count++;
     }
-    line = strtok(NULL, "\n");
-  }
 
-  // Close the read end of the pipe
-  close(pipes[i - 1][0]);
-}
+    int pipes[num_files][2];
+    pid_t pids[num_files];
+
+    // Create pipes and fork child processes
+    for (int i = 0; i < num_files; i++) {
+        if (pipe(pipes[i]) == -1) {
+            perror("pipe");
+            exit(1);
+        }
+        pid_t pid = fork();
+        if (pid == -1) {
+            perror("fork");
+            exit(1);
+        } else if (pid == 0) {
+            // Child process
+            close(pipes[i][0]);
+            FILE *file = fopen(argv[i+1], "r");
+            if (file == NULL) {
+                perror("fopen");
+                exit(1);
+            }
+            struct name_count counts[MAX_NAME_LEN] = {0};
+            char line[MAX_NAME_LEN];
+            while (fgets(line, sizeof(line), file) != NULL) {
+    char *first_name = strtok(line, " \t\r\n");
+    char *last_name = strtok(NULL, " \t\r\n");
+    while (first_name != NULL && last_name != NULL) {
+        char name[MAX_NAME_LEN];
+        snprintf(name, MAX_NAME_LEN, "%s %s", first_name, last_name);
+        int found = 0;
+        for (int j = 0; j < MAX_NAME_LEN; j++) {
+            if (counts[j].count == 0) {
+                strcpy(counts[j].name, name);
+                counts[j].count = 1;
+                found = 1;
+                break;
+            } else if (strcmp(counts[j].name, name) == 0) {
+                counts[j].count++;
+                found = 1;
+                break;
+            }
+        }
+        if (!found) {
+            fprintf(stderr, "Error: too many names\n");
+            exit(1);
+        }
+        first_name = strtok(NULL, " \t\r\n");
+        last_name = strtok(NULL, " \t\r\n");
+    }
 }
 
-// Print the global counts
-for (int i = 0; i < name_count; i++) {
-printf("%s: %d\n", names[i], counts[i]);
+
+            fclose(file);
+            for (int j = 0; j < MAX_NAME_LEN; j++) {
+                if (counts[j].count > 0) {
+                    char buf[MAX_NAME_LEN+10];
+                    sprintf(buf, "%s: %d", counts[j].name, counts[j].count);
+                    if (write(pipes[i][1], buf, sizeof(buf)) == -1) {
+                        perror("write");
+                        exit(1);
+                    }
+                }
+            }
+            close(pipes[i][1]);
+            exit(0);
+        } else {
+            // Parent process
+            pids[i] = pid;
+            close(pipes[i][1]);
+        }
+    }
+
+    // Read name counts from child processes and combine them
+    struct name_count combined_counts[MAX_NAME_LEN] = {0};
+    for (int i = 0; i < num_files; i++) {
+        char buf[MAX_NAME_LEN+10];
+        while (read(pipes[i][0], buf, sizeof(buf)) > 0) {
+            char *name = strtok(buf, ":");
+            char *count_str = strtok(NULL, ":");
+                    int count = atoi(count_str);
+        int found = 0;
+        for (int j = 0; j < MAX_NAME_LEN; j++) {
+            if (combined_counts[j].count == 0) {
+                strcpy(combined_counts[j].name, name);
+                combined_counts[j].count = count;
+                found = 1;
+                break;
+            } else if (strcmp(combined_counts[j].name, name) == 0) {
+                combined_counts[j].count += count;
+                found = 1;
+                break;
+            }
+        }
+        if (!found) {
+            fprintf(stderr, "Error: too many names\n");
+            exit(1);
+        }
+    }
+    close(pipes[i][0]);
+}
+
+// Wait for child processes to finish
+for (int i = 0; i < num_files; i++) {
+    int status;
+    if (waitpid(pids[i], &status, 0) == -1) {
+        perror("waitpid");
+        exit(1);
+    }
+    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+        fprintf(stderr, "Error: child process exited with status %d\n", status);
+        exit(1);
+    }
+}
+
+// Output combined name counts
+for (int i = 0; i < MAX_NAME_LEN; i++) {
+    if (combined_counts[i].count > 0) {
+        printf("%s: %d\n", combined_counts[i].name, combined_counts[i].count);
+    }
 }
 
 return 0;
-}
-
-int count_names(const char *filename, char names[][MAX_NAME_LENGTH], int counts[], int *name_count) {
-FILE *file = fopen(filename, "r");
-if (file == NULL) {
-perror("Error opening file");
-return 1;
-}
-
-char name[MAX_NAME_LENGTH];
-while (fscanf(file, "%s", name) == 1) {
-int index;
-if (find_name_index(names, *name_count, name, &index) == 0) {
-counts[index]++;
-} else {
-strncpy(names[*name_count], name, MAX_NAME_LENGTH);
-counts[*name_count] = 1;
-(*name_count)++;
-}
-}
-
-if (fclose(file) == EOF) {
-perror("Error closing file");
-return 1;
-}
-
-return 0;
-}
-
-int find_name_index(char names[][MAX_NAME_LENGTH], int name_count, const char *name, int *index) {
-for (int i = 0; i < name_count; i++) {
-if (strcmp(names[i], name) == 0) {
-*index = i;
-return 0;
-}
-}
-return 1;
 }
 

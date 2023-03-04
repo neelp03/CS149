@@ -3,7 +3,7 @@
  * Author names: Megan Ju, Neel Patel
  * Author emails: megan.ju@sjsu.edu, neel.patel@sjsu.edu
  * Last modified date: March 2, 2023
- * Creation date: March 2, 2023
+ * Creation date: March 3, 2023
  **/
  
 #include <stdio.h>
@@ -12,10 +12,10 @@
 
 
 /**
- * This function converts track laps to miles
+ * This function prints out a statement four times using fork()
  * Assumption: none
  * Input parameters: none
- * Returns: an integer
+ * Returns: none
  **/
 int main(void) {
 

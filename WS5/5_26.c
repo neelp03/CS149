@@ -21,26 +21,14 @@
  **/
 int main(void) {
 
-	char input[MAX_CHARS];
-	int index = 0;
+	char ch;
 	int count = 0;
 	
-	if(fgets(input, MAX_CHARS, stdin) == NULL) {
-		fprintf(stderr, "Error: Input Error\n");
-		return 1;
-	}
-	
-	while(input[index]){
-		if((input[index] != ' ')&&(input[index] != '.')&&
-		(input[index] != '!')&&(input[index] != ',')){
-			printf("This is my value: %c\n", input[index]);
+	while((ch=getchar()) != '\n'){
+		if((ch != ' ')&&(ch != '.')&&(ch != '!')&&(ch != ',')){
 			count++;
 		}
-		index++;
 	}
-	
-	//subtracting one from count to account for null termination
-	count--;
 	
 	printf("%d\n", count);
 	return 0;

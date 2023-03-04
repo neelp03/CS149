@@ -2,138 +2,152 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/wait.h>
-#include <string.h>
 
-#define MAX_FILES 10
+#define MAX_NAMES 1000
 #define MAX_NAME_LEN 50
-
-struct NameCount
-{
-    char name[MAX_NAME_LEN];
-    int count;
-};
+#define BUF_SIZE 100
 
 int main(int argc, char *argv[])
 {
-    if (argc < 2)
-    {
-        fprintf(stderr, "Usage: %s file1 file2 ... file%d\n", argv[0], MAX_FILES);
-        exit(EXIT_FAILURE);
-    }
-
-    int num_files = argc - 1;
-    char *files[MAX_FILES];
-    for (int i = 0; i < num_files; i++)
-    {
-        files[i] = argv[i + 1];
-    }
-
-    struct NameCount names[MAX_FILES * MAX_NAME_LEN];
+    // Declare names and counts arrays to hold names and counts
+    char names[MAX_NAMES][MAX_NAME_LEN];
+    int counts[MAX_NAMES] = {0};
     int num_names = 0;
 
-    int fd[2];
-    if (pipe(fd) == -1)
+    // Iterate over files and count names
+    for (int i = 1; i < argc; i++)
     {
-        perror("pipe");
-        exit(EXIT_FAILURE);
+        FILE *file = fopen(argv[i], "r");
+        if (!file)
+        {
+            perror(argv[i]);
+            continue;
+        }
+
+        char buf[BUF_SIZE];
+        while (fgets(buf, BUF_SIZE, file))
+        {
+            // Trim trailing newline
+            buf[strcspn(buf, "\n")] = '\0';
+
+            // Check if name already exists in names array
+            int found = 0;
+            for (int j = 0; j < num_names; j++)
+            {
+                if (strcmp(buf, names[j]) == 0)
+                {
+                    found = 1;
+                    counts[j]++;
+                    break;
+                }
+            }
+
+            // If name doesn't exist in names array, add it
+            if (!found)
+            {
+                strcpy(names[num_names], buf);
+                counts[num_names]++;
+                num_names++;
+            }
+        }
+
+        fclose(file);
     }
 
-    for (int i = 0; i < num_files; i++)
+    // Create pipes for communicating counts from child processes to parent process
+    int fd[num_names][2];
+    for (int i = 0; i < num_names; i++)
+    {
+        if (pipe(fd[i]) == -1)
+        {
+            perror("pipe");
+            exit(1);
+        }
+    }
+
+    // Fork child processes to count names
+    for (int i = 0; i < num_names; i++)
     {
         pid_t pid = fork();
-
         if (pid == -1)
         {
             perror("fork");
-            exit(EXIT_FAILURE);
+            exit(1);
         }
         else if (pid == 0)
-        {                 // child process
-            close(fd[0]); // close read end of pipe
+        { // Child process
+            // Close unused write end of pipe
+            close(fd[i][1]);
 
-            FILE *file = fopen(files[i], "r");
-            if (file == NULL)
+            // Read from file and count name
+            int count = 0;
+            FILE *file = fopen(argv[1], "r");
+            if (!file)
             {
-                perror(files[i]);
-                exit(EXIT_FAILURE);
+                perror(argv[1]);
+                exit(1);
             }
 
-            char name[MAX_NAME_LEN];
-            while (fscanf(file, "%s", name) == 1)
+            char buf[BUF_SIZE];
+            while (fgets(buf, BUF_SIZE, file))
             {
-                int found = 0;
-                for (int j = 0; j < num_names; j++)
+                // Trim trailing newline
+                buf[strcspn(buf, "\n")] = '\0';
+
+                if (strcmp(buf, names[i]) == 0)
                 {
-                    if (strcmp(name, names[j].name) == 0)
-                    {
-                        names[j].count++;
-                        found = 1;
-                        break;
-                    }
-                }
-                if (!found)
-                {
-                    strncpy(names[num_names].name, name, MAX_NAME_LEN);
-                    names[num_names].count = 1;
-                    num_names++;
+                    count++;
                 }
             }
 
             fclose(file);
 
-            if (write(fd[1], names, num_names * sizeof(struct NameCount)) == -1)
-            {
-                perror("write");
-                exit(EXIT_FAILURE);
-            }
+            // Write count to pipe
+            write(fd[i][0], &count, sizeof(int));
 
-            exit(EXIT_SUCCESS);
+            // Close read end of pipe
+            close(fd[i][0]);
+
+            // Exit child process
+            exit(0);
         }
         else
-        {                 // parent process
-            close(fd[1]); // close write end of pipe
-
-            struct NameCount child_names[MAX_FILES * MAX_NAME_LEN];
-            ssize_t num_read = read(fd[0], child_names, sizeof(child_names));
-
-            if (num_read == -1)
-            {
-                perror("read");
-                exit(EXIT_FAILURE);
-            }
-
-            int status;
-            waitpid(pid, &status, 0);
-
-            if (WIFEXITED(status) && WEXITSTATUS(status) == EXIT_SUCCESS)
-            {
-                for (int j = 0; j < num_names; j++)
-                {
-                    int found = 0;
-                    for (int k = 0; k < num_read / sizeof(struct NameCount); k++)
-                    {
-                        if (strcmp(child_names[k].name, names[j].name) == 0)
-                        {
-                            names[j].count += child_names[k].count;
-                            found = 1;
-                            break;
-                        }
-                    }
-                    if (!found)
-                    {
-                        strncpy(names[num_names].name, child_names[j].name, MAX_NAME_LEN);
-                        names[num_names].count = child_names[j].count;
-                        num_names++;
-                    }
-                }
-            }
+        { // Parent process
+            // Close unused read end of pipe
+            close(fd[i][0]);
         }
     }
-    // Iterate over name_counts and print final counts for each name
+
+    // Wait for child processes to finish and read counts from pipes
+    // Loop through child processes and read counts from pipes
+    for (int i = 0; i < num_files; i++)
+    {
+        int status;
+        if (waitpid(pid[i], &status, 0) == -1)
+        {
+            fprintf(stderr, "Error waiting for child process %d\n", pid[i]);
+            continue;
+        }
+        if (WIFEXITED(status) && WEXITSTATUS(status) == 0)
+        {
+            int count;
+            if (read(pipes[i][0], &count, sizeof(count)) == -1)
+            {
+                fprintf(stderr, "Error reading count from pipe %d\n", i);
+                continue;
+            }
+            name_count[name_idx[i]] += count;
+        }
+        else
+        {
+            fprintf(stderr, "Child process %d exited with error status %d\n", pid[i], WEXITSTATUS(status));
+        }
+        close(pipes[i][0]);
+    }
+    // Print final counts for each name
     for (int i = 0; i < num_names; i++)
     {
-        printf("%s:%d\n", NameCount[i].name, NameCount[i].count);
+        printf("%s:%d\n", names[i], name_count[i]);
     }
-
     return 0;
 }

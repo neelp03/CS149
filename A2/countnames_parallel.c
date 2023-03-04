@@ -6,97 +6,95 @@
  * Creation date: March 2, 2023
  **/
 #include <stdio.h>
-#include <string.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
+#include <sys/types.h>
 #include <sys/wait.h>
 
 #define MAX_NAME_LENGTH 30
 #define MAX_NAMES 100
 
 /**
- * count_name function for counting name occurrences in a file
- * Assumption: none
- * Input parameters: file name, write end of pipe
- * Returns: 0 if successful, 1 if there was an error
-**/
-int count_name(char *filename, int write_end) {
-  // Declare two arrays to store names and their counts
-  char names[MAX_NAMES][MAX_NAME_LENGTH];
-  int counts[MAX_NAMES];
-
-  // A variable to keep track of the number of names read from the file
-  int name_count = 0;
-
-  // Open the input file
-  FILE *file = fopen(filename, "r");
-
-  // If the file could not be opened, print an error message and return 1
-  if (!file) {
-    fprintf(stderr, "Error: Unable to open file %s.\n", filename);
-    return 1;
-  }
-
-  // Read the names from the input file
-  char name[MAX_NAME_LENGTH];
-  int line_number = 0;
-  while (fgets(name, MAX_NAME_LENGTH, file)) {
-    // Increment the line number
-    line_number++;
-
-    // Get the length of the name read
-    int length = strlen(name);
-
-    // If the length of the name is 1 or less, it is considered an empty line
-    // Print a warning message and continue with the next iteration of the loop
-    if (length <= 1) {
-      fprintf(stderr, "Warning - Line %d in %s is empty.\n", line_number, filename);
-      continue;
-    }
-
-    // Remove the newline character from the name
-    if (name[strlen(name) - 1] == '\n') {
-      name[strlen(name) - 1] = '\0';
-    }
-
-    // Check if the name already exists in the names array
-    int existing_name = 0;
-    for (int i = 0; i < name_count; i++) {
-      if (strcmp(names[i], name) == 0) {
-        // If the name exists, increment its count
-        counts[i]++;
-        existing_name = 1;
-        break;
-      }
-    }
-
-    // If the name does not exist in the names array, add it to the array
-    if (!existing_name) {
-      strcpy(names[name_count], name);
-      counts[name_count] = 1;
-      name_count++;
-    }
-  }
-
-  // Close the input file
-  fclose(file);
-
-  // Write the count for each name to the parent process through the pipe
-  for (int i = 0; i < name_count; i++) {
-    char output[MAX_NAME_LENGTH + 10];  // Allocate space for the output string
-    sprintf(output, "%s: %d\n", names[i], counts[i]);  // Format the output string
-    write(write_end, output, strlen(output));  // Write the output string to the pipe
-  }
-
-  return 0;
-}
-
-/**
- * Main function for reading multiple files and counting name occurrences in parallel
+ * Main function for counting name occurrences in files
  * Assumption: none
  * Input parameters: argc, argv
  * Returns: 0 if successful, 1 if there was an error
 **/
 int main(int argc, char *argv[]) {
+  int i, j, status;
+  char name[MAX_NAME_LENGTH];
+  int counts[MAX_NAMES];
+  pid_t pid;
+  int name_count = 0;
+  int pipefd[2];
 
+  // Create the pipe for communication between parent and child processes
+  if (pipe(pipefd) == -1) {
+    perror("pipe");
+    return 1;
+  }
+
+  // Fork child processes to count names in each file
+  for (i = 1; i < argc; i++) {
+    pid = fork();
+
+    if (pid == -1) {
+      perror("fork");
+      return 1;
+    }
+
+    if (pid == 0) {
+      // Child process
+      FILE *file = fopen(argv[i], "r");
+
+      if (!file) {
+        fprintf(stderr, "Error: Unable to open file %s.\n", argv[i]);
+        exit(1);
+      }
+
+      while (fgets(name, MAX_NAME_LENGTH, file)) {
+        int length = strlen(name);
+        if (length > 1) {
+          if (name[length - 1] == '\n') {
+            name[length - 1] = '\0';
+          }
+
+          int existing_name = 0;
+          for (j = 0; j < name_count; j++) {
+            if (strcmp(name, argv[j+1]) == 0) {
+              counts[j]++;
+              existing_name = 1;
+              break;
+            }
+          }
+
+          if (!existing_name) {
+            strcpy(argv[name_count+1], name);
+            counts[name_count] = 1;
+            name_count++;
+          }
+        }
+      }
+
+      fclose(file);
+
+      // Write the count for each name to the parent process through the pipe
+      write(pipefd[1], counts, MAX_NAMES * sizeof(int));
+      exit(0);
+    }
+  }
+
+  // Parent process
+  for (i = 1; i < argc; i++) {
+    wait(&status);
+    if (WIFEXITED(status)) {
+      read(pipefd[0], counts, MAX_NAMES * sizeof(int));
+      for (j = 0; j < name_count; j++) {
+        printf("%s: %d\n", argv[j+1], counts[j]);
+      }
+    }
+  }
+
+  return 0;
 }

@@ -12,13 +12,17 @@
 
 #define MAX_LENGTH 50
 
+/**
+ * Parses string to output the two strings separated by a comma
+ * Assumption: If the input contains a comma, the input also contains two strings
+ * Input parameters: none
+ * Returns: None.
+ */
 int main() {
 
 	char input[MAX_LENGTH + 1];
 	char ch[2] = ",";
 	char *first, *second, *token;
-	char second[MAX_LENGTH];
-	int ret;
 	char stop[2] = "q";
 	bool done = false;
 
@@ -30,20 +34,22 @@ int main() {
 	
 		if(strcmp(input, stop) == 0){
 			done = true;
-			exit(0);
+			break;
 		}
 	
-		if(ret = strchr(input, ch) == NULL){
+		if(strchr(input, (int)ch[0]) == NULL){
 			fprintf(stderr, "Error: No comma in string.\n");
 		}
 		else{
-			printf("Hello\n");
 			token = strtok(input, ch);
 			first = token;
 			if(token!=NULL){
 				token = strtok(NULL, ch);
 				second = token;
-			} 
+			}
+			
+			printf("First word: %s\n", first);
+			printf("Second word: %s\n", second); 
 		}
 		
 	}

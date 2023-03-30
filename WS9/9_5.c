@@ -16,7 +16,6 @@ int main() {
     char *first, *second, *token;
     size_t bufsize = 32;
     char ch[2] = ",";
-    char quit[3] = "q1";
     int loop = 1;
 
 while(loop){
@@ -24,9 +23,14 @@ while(loop){
     printf("Enter input string:\n");
     getline(&b, &bufsize, stdin);
 
-    if(strcmp(buffer, quit) == 0){
-    	printf("not working\n");
+    if(buffer[strlen(buffer)-1] == '\n'){
+    	buffer[strlen(buffer)-1] = '\0';
+    }
+    
+
+    if(strcmp(buffer, "q") == 0){
     	loop = 0;
+    	break;
     }
     
     else {

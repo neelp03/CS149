@@ -1,3 +1,10 @@
+/**
+  * Description: Exercise 9.5 - Parsing strings from Zybooks
+  * Author names: Megan Ju, Neel Patel
+  * Author emails: megan.ju@sjsu.edu, neel.patel@sjsu.edu
+  * Last modified date: March 29, 2023
+  * Creation date: March 27, 2023
+  **/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

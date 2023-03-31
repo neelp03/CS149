@@ -1,0 +1,8 @@
+    1  make all
+    2  ./sigusr &
+    3  kill -SIGUSR1 3510
+    4  kill -SIGUSR2 3510
+    5  kill -SIGCONT 3510
+    6  kill -9 3510
+    7  history
+    8  history > worksheet9.log

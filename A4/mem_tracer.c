@@ -5,119 +5,130 @@
  * Last modified date: April 5, 2023
  * Creation date: March 29, 2023
  **/
- 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 
-#define INITIAL_SIZE 10
-#define MAX_LINE_LENGTH 1024
+/**
+//CS149 assignment#4 helper code.
+// See the TODO's in the comments below! You need to implement those.
+**/
 
-// Structure to represent a node in the linked list
-struct Node {
-  char* line;
-  int index;
-  struct Node* next;
+/**
+*/ TRACE_NODE_STRUCT is a linked list of
+// pointers to function identifiers
+// TRACE_TOP is the head of the list is the top of the stack
+
+struct TRACE_NODE_STRUCT {
+char functionid; // ptr to function identifier (a function name)
+struct TRACE_NODE_STRUCT next; // ptr to next frama
 };
-typedef struct Node Node;
+typedef struct TRACE_NODE_STRUCT TRACE_NODE;
+static TRACE_NODE TRACE_TOP = NULL; // ptr to the top of the stack
 
-// Global variables for memory tracing
-FILE* mem_trace_file = NULL;
-int total_memory_allocated = 0;
-int total_memory_freed = 0;
+/* --------------------------------/
+/ function PUSH_TRACE /
 
-// Function prototypes
-void push_trace(char* function_name);
-void pop_trace();
-void* my_malloc(size_t size, char* function_name);
-void* my_realloc(void* ptr, size_t size, char* function_name);
-void my_free(void* ptr, char* function_name);
-void print_nodes(Node* head);
-void cleanup(Node* head);
+The purpose of this stack is to trace the sequence of function calls,
+just like the stack in your computer would do.
+The "global" string denotes the start of the function call trace.
+The char *p parameter is the name of the new function that is added to the call trace.
+See the examples of calling PUSH_TRACE and POP_TRACE below
+in the main, make_extend_array, add_column functions.
+*/
+void PUSH_TRACE(char p) // push p on the stack
+{
+TRACE_NODE tnode;
+static char glob[]="global";
+if (TRACE_TOP==NULL) {
+// initialize the stack with "global" identifier
+TRACE_TOP=(TRACE_NODE*) malloc(sizeof(TRACE_NODE));
 
-int main() {
-  // Redirect stdout to memtrace.out
-  mem_trace_file = fopen("memtrace.out", "w");
-  if (mem_trace_file == NULL) {
-    printf("Failed to open memtrace.out for writing\n");
-    exit(1);
-  }
-  dup2(fileno(mem_trace_file), STDOUT_FILENO);
-
-  // Initialize the array to store command lines
-  char** array = (char**)my_malloc(INITIAL_SIZE * sizeof(char*), "main");
-  int array_size = INITIAL_SIZE;
-  int array_index = 0;
-
-  // Initialize the linked list to store lines
-  Node* head = NULL;
-  Node* tail = NULL;
-
-  // Read lines from stdin
-  char buffer[MAX_LINE_LENGTH];
-  int line_index = 0;
-  
-  while (fgets(buffer, MAX_LINE_LENGTH, stdin) != NULL) {
-    // todo
-  }
-  
-  // Todo:
-  // Print the nodes in the linked list
-  // Cleanup and free memory
-
-  return 0;
+// no recovery needed if allocation failed, this is only
+// used in debugging, not in production
+if (TRACE_TOP==NULL) {
+  printf("PUSH_TRACE: memory allocation error\n");
+  exit(1);
 }
 
-void push_trace(char* function_name) {
-  TRACE_NODE* tnode = (TRACE_NODE*)my_malloc(sizeof(TRACE_NODE), function_name);
-  tnode->functionid = function_name;
-  tnode->next = TRACE_TOP;
-  TRACE_TOP = tnode;
+TRACE_TOP->functionid = glob;
+TRACE_TOP->next=NULL;
+}//if
+
+// create the node for p
+tnode = (TRACE_NODE*) malloc(sizeof(TRACE_NODE));
+
+// no recovery needed if allocation failed, this is only
+// used in debugging, not in production
+if (tnode==NULL) {
+printf("PUSH_TRACE: memory allocation error\n");
+exit(1);
+}//if
+
+tnode->functionid=p;
+tnode->next = TRACE_TOP; // insert fnode as the first in the list
+TRACE_TOP=tnode; // point TRACE_TOP to the first node
+
 }
+//end PUSH_TRACE/
 
-void pop_trace() {
-  TRACE_NODE* tnode = TRACE_TOP;
-  TRACE_TOP = TRACE_TOP->next;
-  my_free(tnode, "pop_trace");
+/* --------------------------------/
+/ function POP_TRACE /
+/ Pop a function call from the stack /
+*/
+void POP_TRACE() // remove the op of the stack
+{
+TRACE_NODE tnode;
+tnode = TRACE_TOP;
+TRACE_TOP = tnode->next;
+free(tnode);
+
 }
+// end POP_TRACE
 
-void* my_malloc(size_t size, char* function_name) {
-  // Push the function name to the memory trace stack
-  push_trace(function_name);
+/* ---------------------------------------------- /
+/ function PRINT_TRACE prints out the sequence of function calls that are on the stack at this instance /
+/ For example, it returns a string that looks like: global:funcA:funcB:funcC. /
+/ Printing the function call sequence the other way around is also ok: funcC:funcB:funcA:global /
+*/
+/* ---------------------------------------------- */
+/* function PRINT_TRACE prints out the sequence of function calls that are on the stack at this instance */
+/* For example, it returns a string that looks like: global:funcA:funcB:funcC. */
+/* Printing the function call sequence the other way around is also ok: funcC:funcB:funcA:global */
 
-  // Allocate memory using malloc
-  void* ptr = malloc(size);
+char* PRINT_TRACE()
+{
+  int depth = 50; // A max of 50 levels in the stack will be combined in a string for printing out.
+  int i, length, j;
+  TRACE_NODE* tnode;
+  static char buf[100];
 
-  // Update total memory allocated and print memory trace
-  total_memory_allocated += size;
-  fprintf(mem_trace_file, "Allocated %lu bytes at address %p in function %s\n", size, ptr, function_name);
-
-  // Pop the function name from the memory trace stack
-  pop_trace();
-
-  return ptr;
-}
-
-void* my_realloc(void* ptr, size_t size, char* function_name) {
-  // Push the function name to the memory trace stack
-  push_trace(function_name);
-
-  // Reallocate memory using realloc
-  void* new_ptr = realloc(ptr, size);
-
-  // Update total memory allocated and freed and print memory trace
-  if (new_ptr != NULL) {
-    int old_size = malloc_usable_size(ptr);
-    total_memory_allocated += size - old_size;
-    total_memory_freed += old_size;
-    fprintf(mem_trace_file, "Reallocated %lu bytes at address %p in function %s\n", size, new_ptr, function_name);
-  } else {
-    fprintf(mem_trace_file, "Failed to reallocate %lu bytes in function %s\n", size, function_name);
+  if (TRACE_TOP == NULL) {     // stack not initialized yet, so we are
+    strcpy(buf, "global");     // still in the `global' area
+    return buf;
   }
 
-  // Pop the function name from the memory trace stack
-  pop_trace();
+  /* Peek at the top depth (50) entries on the stack, but do not
+     go over 100 chars and do not go over the bottom of the stack */
+  sprintf(buf, "%s", TRACE_TOP->functionid);
+  length = strlen(buf);        // length of the string so far
+  for (i = 1, tnode = TRACE_TOP->next; tnode != NULL && i < depth; i++, tnode = tnode->next) {
+    j = strlen(tnode->functionid);    // length of what we want to add
+    if (length + j + 1 < 100) {       // total length is ok
+      sprintf(buf + length, ":%s", tnode->functionid);
+      length += j + 1;
+    } else {                          // it would be too long
+      break;
+    }
+  }
 
-  return new_ptr;
-}
+  // Print info about memory usage
+  printf("File %s, line %d, function %s ", __FILE__, __LINE__, __func__);
+  printf("allocated memory segment at address %p to size %d\n", buf, length);
+  printf("Current call trace: %s\n", buf);
+
+  return buf;
+} /* end PRINT_TRACE */
+
 

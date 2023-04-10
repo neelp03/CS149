@@ -1,226 +1,175 @@
-#include <stdio.h>   // for printf, FILE, fopen, fclose, fprintf
-#include <stdlib.h>  // for malloc, free, exit
-#include <string.h>  // for strcmp, strlen, strncpy
-#include <fcntl.h>   // for open, O_CREAT, O_WRONLY, O_TRUNC
-#include <unistd.h>  // for write
-#include <sys/stat.h> // for S_IRUSR, S_IWUSR
+/**
+ * Description: Memory tracer tool - Assingment 4
+ * Author names: Megan Ju, Neel Patel
+ * Author emails: megan.ju@sjsu.edu, neel.patel@sjsu.edu
+ * Last modified date: April 10, 2023
+ * Creation date: March 29, 2023
+ **/
 
 
-// Node structure for linked list
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+#define MAX_LINE_LENGTH 1000
+
+// Linked list node structure for storing lines
 typedef struct node {
-    char* line;
+    char *line;
     int index;
-    struct node* next;
-    char* function;
-} node_t;
+    struct node *next;
+    struct node *tail;
+} Node;
 
-// Stack structure for function calls
+// Stack data structure for tracking function calls
 typedef struct stack {
+    char *functions[1000];
     int top;
-    char** function;
-    int size;
-} stack_t;
+} Stack;
 
-// Function prototypes
-char** make_extend_array(char** array, int size, int increment, int* count);
-node_t* add_node(node_t* head, char* line, int index);
-void print_nodes(node_t* head);
-void push(stack_t* stack, char* function);
-char* pop(stack_t* stack);
-void mem_alloc(char* function, int size);
-void mem_realloc(char* function, void* ptr, int size);
-void mem_free(char* function, void* ptr);
+// Function declarations
+void push(Stack *stack, char *function);
+char *pop(Stack *stack);
+void printMemory(char *type, char *function, int line, void *ptr, size_t size);
+void *safeMalloc(size_t size, char *function, int line);
+void *safeRealloc(void *ptr, size_t size, char *function, int line);
+void safeFree(void *ptr, char *function, int line);
+Node *createNode(char *line, int index);
+void addNodeToList(Node **head, char *line, int index);
+void printNodes(Node *head);
 
 int main() {
-    // Redirect stdout to memtrace.out
-    int fd = open("memtrace.out", O_CREAT | O_WRONLY | O_TRUNC, S_IRUSR | S_IWUSR);
-    dup2(fd, STDOUT_FILENO);
+    // Redirect stdout to memtrace.out file
+    FILE *fp = fopen("memtrace.out", "w");
+    if (fp == NULL) {
+        printf("Error opening file\n");
+        return 1;
+    }
+    dup2(fileno(fp), STDOUT_FILENO);
+    setbuf(stdout, NULL);
 
-    char** array = NULL;
-    int size = 10;
-    int increment = 10;
-    int count = 0;
+    // Initialize stack for tracking function calls
+    Stack callStack;
+    callStack.top = -1;
 
-    // Initialize stack for memory tracing
-    stack_t stack;
-    stack.top = -1;
-    stack.function = malloc(sizeof(char*) * 100);
+    // Initialize array of char * pointers with malloc to an initial size of 10
+    char **lines = safeMalloc(10 * sizeof(char *), "main", __LINE__);
 
-    char* line = NULL;
-    size_t len = 0;
-    ssize_t read;
-
-    node_t* head = NULL;
+    // Read lines from stdin into dynamically allocated array of char *
+    char buffer[MAX_LINE_LENGTH];
     int index = 0;
-
-    // Read lines from stdin
-    while ((read = getline(&line, &len, stdin)) != -1) {
-        // Remove newline character at end of line
-        if (line[read - 1] == '\n') {
-            line[read - 1] = '\0';
+    int arraySize = 10;
+    Node *head = NULL;
+  
+    while (fgets(buffer, MAX_LINE_LENGTH, stdin)) {
+        // Remove newline character from end of line
+        int len = strlen(buffer);
+        if (len > 0 && buffer[len-1] == '\n') {
+            buffer[len-1] = '\0';
         }
 
-        // Store line in array
-        if (count >= size) {
-            array = make_extend_array(array, size, increment, &count);
-            push(&stack, "make_extend_array");
-        }
-        array[count] = malloc(strlen(line) + 1);
-        push(&stack, "malloc");
-        strcpy(array[count], line);
-        count++;
+        // Add line to array and linked list
+        char *line = safeMalloc((len+1) * sizeof(char), "main", __LINE__);
+        strncpy(line, buffer, len+1);
+        lines[index] = line;
+        addNodeToList(&head, line, index);
 
-        // Store line in linked list
-        head = add_node(head, line, index);
-        push(&stack, "add_node");
+        // Check if array needs to be reallocated
+        if (index == arraySize-1) {
+            arraySize *= 2;
+            lines = safeRealloc(lines, arraySize * sizeof(char *), "main", __LINE__);
+        }
+
         index++;
     }
 
-    // Print content of linked list
-    print_nodes(head);
-    push(&stack, "print_nodes");
+    // Print contents of linked list
+    printNodes(head);
 
-    // Free memory allocated for linked list
-    node_t* current = head;
-    while (current != NULL) {
-        node_t* next = current->next;
-        free(current->line);
-        push(&stack, "free");
-        free(current);
-        push(&stack, "free");
-        current = next;
-    }
-
-    // Free memory allocated for array
-    for (int i = 0; i < count; i++) {
-        free(array[i]);
-        push(&stack, "free");
-    }
-    free(array);
-    push(&stack, "free");
-
-    // Free memory allocated for stack
-    free(stack.function);
-    push(&stack, "free");
-
+    safeFree(lines, "main", __LINE__);
+    
+    Node *current = head;
+	while (current != NULL) {
+		Node *temp = current;
+		current = current->next;
+		safeFree(temp->line, "main", __LINE__);
+		safeFree(temp, "main", __LINE__);
+	}
     return 0;
 }
 
-// Function to allocate and reallocate memory for array
-char** make_extend_array(char** array, int size, int increment, int* count) {
-    // Print memory allocation message
-    mem_alloc("make_extend_array", sizeof(char*) * (size + increment));
-
-    // Reallocate memory for array
-    array = realloc(array, sizeof(char*) * (size + increment));
-
-    // Print memory reallocation message
-	mem_realloc("make_extend_array", (void**) &array, sizeof(char*) * (size + increment));
-
-	// Check if reallocation was successful
-	if (array == NULL) {
-		printf("Error: could not reallocate memory for array\n");
-		exit(1);
-	}
-
-	// Increment count by the number of new elements added to array
-	*count += increment;
-
-	// Return the updated array
-	return array;
+// Stack function implementations
+void push(Stack *stack, char *function) {
+    stack->functions[++stack->top] = function;
 }
 
-node_t* add_node(node_t* head, char* line, int index) {
-    // Allocate memory for new node
-    node_t* new_node = (node_t*)malloc(sizeof(node_t));
-
-    // Initialize new node
-    new_node->line = line;
-    new_node->index = index;
-    new_node->next = NULL;
-
-    // If list is empty, new node is head
-    if (head == NULL) {
-        head = new_node;
+char *pop(Stack *stack) {
+    if (stack->top == -1) {
+        return NULL;
     }
-    // Otherwise, add new node to end of list
-    else {
-        node_t* current = head;
-        while (current->next != NULL) {
-            current = current->next;
-        }
-        current->next = new_node;
-    }
-
-    // Return updated head
-    return head;
+    return stack->functions[stack->top--];
 }
 
-void print_nodes(node_t* head) {
-    node_t* current = head;
+// Memory tracing function implementations
+void printMemory(char *type, char *function, int line, void *ptr, size_t size) {
+    printf("%s: function=%s, line=%d, ptr=%p, size=%lu\n", type, function, line, ptr, size);
+}
 
+void *safeMalloc(size_t size, char *function, int line) {
+    void *ptr = malloc(size);
+    if (ptr == NULL) {
+        fprintf(stderr, "Error: Memory allocation failed in function %s, line %d\n", function, line);
+        exit(1);
+    }
+    printMemory("MALLOC", function, line, ptr, size);
+    return ptr;
+}
+
+void *safeRealloc(void *ptr, size_t size, char *function, int line) {
+    void *new_ptr = realloc(ptr, size);
+    if (new_ptr == NULL) {
+        fprintf(stderr, "Error: Memory reallocation failed in function %s, line %d\n", function, line);
+        exit(1);
+    }
+    printMemory("REALLOC", function, line, new_ptr, size);
+    return new_ptr;
+}
+
+void safeFree(void *ptr, char *function, int line) {
+    if (ptr != NULL) {
+        printMemory("FREE", function, line, ptr, 0);
+        free(ptr);
+    }
+}
+
+Node *createNode(char *line, int index) {
+    Node *node = (Node *)safeMalloc(sizeof(Node), "createNode", __LINE__);
+    node->line = line;
+    node->index = index;
+    node->next = NULL;
+    node->tail = node;
+    return node;
+}
+
+void addNodeToList(Node **head, char *line, int index) {
+    Node *newNode = createNode(line, index);
+    if (*head == NULL) {
+        *head = newNode;
+        (*head)->tail = newNode; // set the tail pointer to the new node
+        return;
+    }
+
+    (*head)->tail->next = newNode; // add new node to the end of the list
+    (*head)->tail = newNode; // update the tail pointer
+}
+
+
+void printNodes(Node *head) {
+    Node *current = head;
     while (current != NULL) {
-        printf("%p\n", current->function);
+        printf("%d: %s\n", current->index, current->line);
         current = current->next;
     }
 }
-
-void push(stack_t* stack, char* function) {
-    // Create new node for function
-    node_t* new_node = (node_t*) malloc(sizeof(node_t));
-    new_node->function = function;
-    new_node->next = NULL;
-
-    // Add new node to top of stack
-    new_node->next = (node_t*)stack->top;
-	stack->top = (void*)new_node;
-
-    stack->size++;
-}
-
-// Function to remove the top element from the stack and return it
-void* pop(stack_t* stack) {
-    // Check if stack is empty
-    if (stack->top != NULL) {
-        printf("Error: stack is empty\n");
-        return NULL;
-    }
-
-    // Store the top element and remove it from the stack
-    void (*function)() = ((node_t*)stack->top)->function;
-
-    int* temp = (int*)stack->top;
-    stack->top = (node_t *)stack->top->next;
-    free(temp);
-
-    return function;
-}
-
-// Function to print memory allocation message
-void mem_alloc(char* function, int size) {
-    printf("Memory allocated in function %s, size = %d\n", function, size);
-}
-
-void mem_realloc(char* function, void* ptr, int size) {
-    // Print memory reallocation message
-    printf("file-\"%s\", function=%s, segment reallocated to address %p\n", __FILE__, function, ptr);
-    
-    // Reallocate memory
-    ptr = realloc(ptr, size);
-    
-    // Check if reallocation failed
-    if (ptr == NULL) {
-        fprintf(stderr, "Memory reallocation failed in function %s\n", function);
-        exit(EXIT_FAILURE);
-    }
-}
-
-void mem_free(char* function, void* ptr) {
-    // Print memory deallocation message
-    printf("file-\"%s\", function=%s, segment freed at address %p\n", __FILE__, function, ptr);
-    
-    // Free memory
-    free(ptr);
-}
-
 

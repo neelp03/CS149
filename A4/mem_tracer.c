@@ -121,3 +121,15 @@ void* my_realloc(void* ptr, size_t size, char* function_name) {
   return new_ptr;
 }
 
+void print_nodes(Node* head){
+	// NEEDS TO BE TESTING
+	while(head != NULL){
+		printf("Node %d: %s\n", head->index, head->line);
+		head = head->next;
+	}
+}
+
+void cleanup(Node* head){
+	// TO DO
+}
+

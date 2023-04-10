@@ -11,11 +11,6 @@
 #include <stdarg.h>
 
 /**
-//CS149 assignment#4 helper code.
-// See the TODO's in the comments below! You need to implement those.
-**/
-
-/**
 */ TRACE_NODE_STRUCT is a linked list of
 // pointers to function identifiers
 // TRACE_TOP is the head of the list is the top of the stack
@@ -87,11 +82,7 @@ free(tnode);
 }
 // end POP_TRACE
 
-/* ---------------------------------------------- /
-/ function PRINT_TRACE prints out the sequence of function calls that are on the stack at this instance /
-/ For example, it returns a string that looks like: global:funcA:funcB:funcC. /
-/ Printing the function call sequence the other way around is also ok: funcC:funcB:funcA:global /
-*/
+
 /* ---------------------------------------------- */
 /* function PRINT_TRACE prints out the sequence of function calls that are on the stack at this instance */
 /* For example, it returns a string that looks like: global:funcA:funcB:funcC. */

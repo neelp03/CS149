@@ -132,15 +132,3 @@ char* PRINT_TRACE()
 } /* end PRINT_TRACE */
 
 
-void print_nodes(Node* head){
-	// NEEDS TO BE TESTING
-	while(head != NULL){
-		printf("Node %d: %s\n", head->index, head->line);
-		head = head->next;
-	}
-}
-
-void cleanup(Node* head){
-	// TO DO
-}
-

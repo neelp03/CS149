@@ -98,7 +98,7 @@ Returns: the process ID of the new child process if successful, -1 if unsuccessf
 int spawn_child(char *argv[], int index, time_t start)
 {
     pid_t pid;
-
+    int stdout_fd, stderr_fd;
 
     if ((pid = fork()) < 0) {
         printf("fork error: %s\n", strerror(errno));
@@ -108,6 +108,8 @@ int spawn_child(char *argv[], int index, time_t start)
         char out_file[MAXLINE], err_file[MAXLINE];
         sprintf(out_file, "%d.out", getpid());
         sprintf(err_file, "%d.err", getpid());
+        stdout_fd = dup(STDOUT_FILENO);
+        stderr_fd = dup(STDERR_FILENO);
         freopen(out_file, "w", stdout);
         freopen(err_file, "w", stderr);
         printf("Started child process with pid %d at %ld\n", pid, start);
@@ -123,6 +125,8 @@ int spawn_child(char *argv[], int index, time_t start)
     }
     return pid;
 }
+
+
 
 
 /**

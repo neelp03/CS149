@@ -31,12 +31,24 @@ struct nlist {
 #define HASHSIZE 101
 static struct nlist *hashtable[HASHSIZE]; 
 
+/**
+ * hash() - hashes the pid
+ * Assumption: None
+ * @param pid: process id
+ * Returns: returns hashed value of pid
+**/
 unsigned hash(int pid)
 {
     unsigned hashvalue = pid;
     return hashvalue % HASHSIZE;
 }
 
+/**
+ * lookup() - retrieves data from hash table
+ * Assumption: None
+ * @param pid : process id to lookup
+ * Returns: node if pid found else returns null
+**/
 struct nlist *lookup(int pid)
 {
     struct nlist *np;
@@ -46,6 +58,12 @@ struct nlist *lookup(int pid)
     return NULL;
 }
 
+/**
+ * insert() - inserts new pid into the hashtable
+ * Assumption: None
+ * @param pid : process id to insert
+ * Returns: null if pid already exists else returns the created node
+**/
 struct nlist *insert(int pid)
 {
     struct nlist *np;
@@ -64,6 +82,13 @@ struct nlist *insert(int pid)
     return np;
 }
 
+/**
+ * handle_command() - runs commands and write output/error to files
+ * Assumption: None
+ * @param **commands : pointer to the 2d array that contains the commands
+ * @param index : command number
+ * Returns: 0 always
+**/
 int handle_command(char **commands, int index) {
     char filename[MAX_LENGTH];
 
@@ -88,7 +113,7 @@ int handle_command(char **commands, int index) {
 
     execvp(args[0], args);
     fprintf(err, "Could not execute: %s\n", commands[index]);
-    return 2;
+    return 0;
 }
 
 int main( int argc, char *argv[] ) {

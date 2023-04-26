@@ -1,258 +1,151 @@
-/**
-  * Description: This utility counts the number of times a name appears in a set of files
-  * Author name: Neel Patel; Megan Ju
-  * Author email: neel.patel01@sjsu.edu; megan.ju@sjsu.edu
-  * Last modified date: April 25, 2023
-  * Creation date: April 25, 2023
-  **/
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdbool.h>
+#include <time.h>
 #include <unistd.h>
-#include <sys/wait.h>
+#include <pthread.h>
 
-#define MAX_NAME_LEN 100
-#define MAX_FILES 10
+#define MAX_NAMES 100
+#define MAX_CHAR 30
 
-// created structure to contain
-// names and counts
-struct name_count {
-    char name[MAX_NAME_LEN];
-    int count;
+//thread mutex lock for access to the log index
+//TODO you need to use this mutexlock for mutual exclusion
+//when you print log messages from each thread
+pthread_mutex_t tlock1 = PTHREAD_MUTEX_INITIALIZER;
+
+
+//thread mutex lock for critical sections of allocating THREADDATA
+//TODO you need to use this mutexlock for mutual exclusion
+pthread_mutex_t tlock2 = PTHREAD_MUTEX_INITIALIZER; 
+
+
+//thread mutex lock for access to the name counts data structure
+//TODO you need to use this mutexlock for mutual exclusion
+pthread_mutex_t tlock3 = PTHREAD_MUTEX_INITIALIZER; 
+
+
+void* thread_runner(void*);
+pthread_t tid1, tid2;
+
+//struct points to the thread that created the object. 
+//This is useful for you to know which is thread1. Later thread1 will also deallocate.
+struct THREADDATA_STRUCT
+{
+  pthread_t creator;
+};
+typedef struct THREADDATA_STRUCT THREADDATA;
+
+THREADDATA* p=NULL;
+
+
+//variable for indexing of messages by the logging function.
+int logindex=0;
+int *logip = &logindex;
+
+
+//The name counts.
+// You can use any data structure you like, here are 2 proposals: a linked list OR an array (up to 100 names).
+//The linked list will be faster since you only need to lock one node, while for the array you need to lock the whole array.
+//You can use a linked list template from A5. You should also consider using a hash table, like in A5 (even faster).
+struct NAME_STRUCT
+{
+  char name[30];
+  int count;
+};
+typedef struct NAME_STRUCT THREAD_NAME;
+
+//array of 100 names
+THREAD_NAME names_counts[100];
+
+//node with name_info for a linked list
+struct NAME_NODE
+{
+  THREAD_NAME name_count;
+  struct NAME_NODE *next;
 };
 
-/**
- * Main function for counting name occurrences in multiple files
- * Assumption: none
- * Input parameters: argc, argv
- * Returns: 0 if successful, 1 if there was an error
-**/
-int main(int argc, char *argv[]) {
-
-    // number of files passed into the method
-    int num_files = argc - 1;
-    
-    /* if number of files is bigger than accepted,
-      print out an error and exit the method */
-    if (num_files > MAX_FILES) {
-        fprintf(stderr, "Error: too many files (maximum %d)\n", MAX_FILES);
-        exit(1);
-    }
-
-    // creating pipes for each file that was passed in
-    int pipes[num_files][2];
-    // keeping track of process ids for each file
-    pid_t pids[num_files];
-
-/*---  ITERATING THROUGH EACH FILE TO COUNT NAMES  ---*/
-
-    for (int i = 0; i < num_files; i++) {
-    	// if there's an error with the pipe, 
-    	// exit the method
-        if (pipe(pipes[i]) == -1) {
-            perror("pipe");
-            exit(1);
-        }
-        // creating a new process
-        pid_t pid = fork();
-        
-        // if fork() failed
-        if (pid == -1) {
-            perror("fork");
-            exit(1);
-        } 
-        
-        /*****  CHILD PROCESS  *****/
-        else if (pid == 0) {
-            // closing read end of the pipe
-            close(pipes[i][0]);
-            // open input file
-            FILE *file = fopen(argv[i+1], "r");
-            // If file is null, exit the method
-            if (file == NULL) {
-                perror("fopen");
-                exit(1);
-            }
-            
-            // keep track of name counts for each name read
-            struct name_count counts[MAX_NAME_LEN] = {0};
-            // temp var for name read
-            char line[MAX_NAME_LEN];
-            
-            // read until eof
-            while (fgets(line, sizeof(line), file) != NULL) {
-    		// store the first name found by breaking up the read line
-    		// by tab, carriage returns, and newlines        
-    		char *first_name = strtok(line, " \t\r\n");
-    		// store the last name found by breaking up the prior read in
-    		// line by tab, carriage returns, and newlines  
-    		char *last_name = strtok(NULL, " \t\r\n");
-    		
-    		// as long as there is a first name and last name
-    		while (first_name != NULL && last_name != NULL) {
-    			// temp var for name
-        		char name[MAX_NAME_LEN];
-        		// stores name found in the temp variable
-        		snprintf(name, MAX_NAME_LEN, "%s %s", first_name, last_name);
-        		
-        		// keeping track if the name was found or not
-        		int found = 0;
-        		// for each name
-        		for (int j = 0; j < MAX_NAME_LEN; j++) {
-        			
-        			// if the count for the name is 0
-            			if (counts[j].count == 0) {
-            			// copy the name into the counts structure
-                		strcpy(counts[j].name, name);
-                		// update count
-                		counts[j].count = 1;
-                		// found is updated
-                		found = 1;
-                		break;
-            			} 
-            			
-            			// if the name is already in counts
-            			else if (strcmp(counts[j].name, name) == 0) {
-            				// update count
-                			counts[j].count++;
-                			// found is updated
-                			found = 1;
-                			break;
-            			}
-        		}
-        		// if the name isn't found, error printed
-        		if (!found) {
-            			fprintf(stderr, "Error: too many names\n");
-            			exit(1);
-        		}
-        		
-        		// read in new first and last names in same way as before
-        		first_name = strtok(NULL, " \t\r\n");
-        		last_name = strtok(NULL, " \t\r\n");
-    		}	
-	}
-
-            // closing the file
-            fclose(file);
-            // for each name
-            for (int j = 0; j < MAX_NAME_LEN; j++) {
-            	// if the name exists
-                if (counts[j].count > 0) {
-                    char buf[MAX_NAME_LEN+10];
-                    // store name in counts
-                    sprintf(buf, "%s: %d", counts[j].name, counts[j].count);
-                    // if writing through the write end of the pipe occurs an error
-                    // print out error
-                    if (write(pipes[i][1], buf, sizeof(buf)) == -1) {
-                        perror("write");
-                        exit(1);
-                    }
-                }
-            }
-            // closing write end of pipe
-            close(pipes[i][1]);
-            // successful process
-            exit(0);
-        } 
-        
-        /*****  PARENT PROCESS  *****/
-        else {
-            // save pid in array
-            pids[i] = pid;
-            // close write end of the pipe
-            close(pipes[i][1]);
-        }
-    }
 
 
-    /*---  READING NAMES COUNTS FROM CHILD PROCESSES AND COMBINE  ---*/
-    // combined_counts keeps track of the name and the total count found
-    struct name_count combined_counts[MAX_NAME_LEN] = {0};
-    
-    // for each file
-    for (int i = 0; i < num_files; i++) {
-    	
-    	// buffer
-        char buf[MAX_NAME_LEN+10];
-        
-        // get value read from pipes for certain file,
-        // read until eof
-        while (read(pipes[i][0], buf, sizeof(buf)) > 0) {
-            
-            // breaks the read string up by :
-            // saves name to the name in combined_counts
-            char *name = strtok(buf, ":");
-         
-            // breaks the previous string up by :
-            // saves count to the count_str in combined_counts
-            char *count_str = strtok(NULL, ":");
-            
-            // convert string argument to integer
-            int count = atoi(count_str);
-        
-            // new names found	
-            int found = 0;
-        
-        // for each name in the file
-        for (int j = 0; j < MAX_NAME_LEN; j++) {
-            // if the name hasn't been found before, copy the name into
-            // combine_counts and set the count to updated count value.
-            // Update found value and go to next iteration
-            if (combined_counts[j].count == 0) {
-                strcpy(combined_counts[j].name, name);
-                combined_counts[j].count = count;
-                found = 1;
-                break;
-            } 
-            
-            // if the name already matches another name already found
-            // update count for that name. Update found value and go to 
-            // next iteration
-            else if (strcmp(combined_counts[j].name, name) == 0) {
-                combined_counts[j].count += count;
-                found = 1;
-                break;
-            }
-        }
-        
-        // If found is 0, there are too many names. Printing error
-        if (!found) {
-            fprintf(stderr, "Error: too many names\n");
-            exit(1);
-        }
-    }
-    // close read end of each pipe
-    close(pipes[i][0]);
-}
+/*********************************************************
+// function main 
+*********************************************************/
+int main()
+{
+  //TODO similar interface as A2: give as command-line arguments three filenames of numbers (the numbers in the files are newline-separated).
 
-/*---  WAIT FOR CHILD TO FINISH  ---*/
-// for each file
-for (int i = 0; i < num_files; i++) {
-    int status;
-    // waiting for child processes, print error to
-    // stderr
-    if (waitpid(pids[i], &status, 0) == -1) {
-        perror("waitpid");
-        exit(1);
-    }
-    // If there was a problem with child termination, print status 
-    // error to stderr
-    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-        fprintf(stderr, "Error: child process exited with status %d\n", status);
-        exit(1);
-    }
-}
+  printf("create first thread");
+  pthread_create(&tid1,NULL,thread_runner,NULL);
+  
+  printf("create second thread");
+  pthread_create(&tid2,NULL,thread_runner,NULL);
+  
+  printf("wait for first thread to exit");
+  pthread_join(tid1,NULL);
+  printf("first thread exited");
 
-/*---  PRINTING OUT THE COMBINED NAME COUNTS  ---*/
-for (int i = 0; i < MAX_NAME_LEN; i++) {
-    if (combined_counts[i].count > 0) {
-        printf("%s: %d\n", combined_counts[i].name, combined_counts[i].count);
-    }
-}
+  printf("wait for second thread to exit");
+  pthread_join(tid2,NULL);
+  printf("second thread exited");
 
-// successful program
-return 0;
-}
+  //TODO print out the sum variable with the sum of all the numbers
+
+  exit(0);
+
+}//end main
+
+
+/**********************************************************************
+// function thread_runner runs inside each thread 
+**********************************************************************/
+void* thread_runner(void* x)
+{
+  pthread_t me;
+
+  me = pthread_self();
+  printf("This is thread %ld (p=%p)",me,p);
+  
+  pthread_mutex_lock(&tlock2); // critical section starts
+  if (p==NULL) {
+    p = (THREADDATA*) malloc(sizeof(THREADDATA));
+    p->creator=me;
+  }
+  pthread_mutex_unlock(&tlock2);  // critical section ends
+
+  if (p!=NULL && p->creator==me) {
+    printf("This is thread %ld and I created THREADDATA %p",me,p);
+  } else {
+    printf("This is thread %ld and I can access the THREADDATA %p",me,p);
+  }
+
+
+  /**
+   * //TODO implement any thread name counting functionality you need. 
+   * Assign one file per thread. Hint: you can either pass each argv filename as a thread_runner argument from main.
+   * Or use the logindex to index argv, since every thread will increment the logindex anyway 
+   * when it opens a file to print a log message (e.g. logindex could also index argv)....
+   * //Make sure to use any mutex locks appropriately
+   */
+
+
+
+  // TODO use mutex to make this a start of a critical section 
+  if (p!=NULL && p->creator==me) {
+    printf("This is thread %ld and I delete THREADDATA",me);
+  /**
+   * TODO Free the THREADATA object.
+   * Freeing should be done by the same thread that created it.
+   * See how the THREADDATA was created for an example of how this is done.
+   */
+
+  } else {
+    printf("This is thread %ld and I can access the THREADDATA",me);
+  }
+  // TODO critical section ends
+
+  pthread_exit(NULL);
+  return NULL;
+
+}//end thread_runner
+
 

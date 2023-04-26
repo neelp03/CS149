@@ -2,266 +2,223 @@
  * Description: Assignment 5
  * Author names: Megan Ju, Neel Patel
  * Author emails: megan.ju@sjsu.edu, neel.patel@sjsu.edu
- * Last modified date: April 22, 2023
+ * Last modified date: April 25, 2023
  * Creation date: April 21, 2023
  **/
 
 
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <time.h>
-#include <unistd.h>
-#include <signal.h>
-#include <errno.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
+#include <time.h>
+#include <unistd.h>
 
-
-#define HASHSIZE 101
-#define MAXLINE 1000
-#define MAXARGS 128
-#define MAXCHILDREN 50
-#define MAXRUNTIME 2
-
-static struct nlist *hashtab[HASHSIZE];
+#define MAX_LENGTH 31
 
 struct nlist {
-    struct nlist *next; /* next entry in chain */
-    int pid;  /* process ID */
-    char *command;  /* command to execute */
-    int index; /* line index in input file */
-    time_t starttime; /* start time */
-    time_t finishtime; /* finish time */
+    time_t start;   
+    time_t finish;  
+    int index;          
+    int pid;            
+    char *command;      
+    struct nlist *next;
 };
 
-/**
-This function calculates a hash value based on the given process ID
-Assumption: none
-Input parameters: an integer representing the process ID
-Returns: an unsigned integer representing the hash value
-**/
+#define HASHSIZE 101
+static struct nlist *hashtable[HASHSIZE]; 
+
 unsigned hash(int pid)
 {
-    return pid % HASHSIZE;
+    unsigned hashvalue = pid;
+    return hashvalue % HASHSIZE;
 }
 
-/**
-This function searches the hash table for an entry with the given process ID
-Assumption: none
-Input parameters: an integer representing the process ID
-Returns: a pointer to the entry if found, NULL if not found
-**/
 struct nlist *lookup(int pid)
 {
     struct nlist *np;
-    for (np = hashtab[hash(pid)]; np != NULL; np = np->next)
+    for (np = hashtable[hash(pid)]; np != NULL; np = np->next)
         if (pid == np->pid)
-          return np; /* found */
-    return NULL; /* not found */
+            return np;
+    return NULL;
 }
 
-
-/**
-This function inserts a new entry into the hash table with the given process ID, command, line index, and start time
-Assumption: none
-Input parameters: an integer representing the process ID, a string representing the command, an integer representing the line index, and a time_t representing the start time
-Returns: a pointer to the new entry if successful, NULL if unsuccessful
-**/
-struct nlist *insert(int pid, char *command, int index, time_t start)
+struct nlist *insert(int pid)
 {
     struct nlist *np;
-    unsigned hashval;
-    if ((np = lookup(pid)) == NULL) { /* not found */
-        np = (struct nlist *) malloc(sizeof(*np));
-        if (np == NULL || (np->command = strdup(command)) == NULL) {
-        	free(np->command);
-        	free(np);
-        	return NULL;
-       	}
-        hashval = hash(pid);
+    unsigned hashvalue;
+
+    if ((np = lookup(pid)) == NULL) { 
+        np = (struct nlist *) malloc(sizeof(struct nlist));
+        if (np == NULL)
+            return NULL;
         np->pid = pid;
-        np->index = index;
-        np->starttime = start;
-        np->next = hashtab[hashval];
-        hashtab[hashval] = np;
+        hashvalue = hash(pid);
+        np->next = hashtable[hashvalue];
+        hashtable[hashvalue] = np;
     }
+
     return np;
 }
 
-/**
-This function spawns a new child process to execute the given command
-Assumption: none
-Input parameters: an array of strings representing the command and its arguments, an integer representing the line index, and a time_t representing the start time
-Returns: the process ID of the new child process if successful, -1 if unsuccessful
-**/
-int spawn_child(char *argv[], int index, time_t start)
-{
-    pid_t pid;
-    if ((pid = fork()) < 0) {
-        printf("fork error: %s\n", strerror(errno));
-        return -1;
-    } else if (pid == 0) {
-        /* child process */
-        char out_file[MAXLINE], err_file[MAXLINE];
-        sprintf(out_file, "%d.out", getpid());
-        sprintf(err_file, "%d.err", getpid());
-        freopen(out_file, "w", stdout);
-        freopen(err_file, "w", stderr);
-        printf("Started child process with pid %d at %ld\n", getpid(), start);
-        execvp(argv[0], argv);
-        /* if execvp returns, there was an error */
-        printf("execvp error: %s\n", strerror(errno));
-        exit(1);
-    }
-    /* parent process */
-    if (insert(pid, argv[0], index, start) == NULL) {
-        printf("insert error: %s\n", strerror(errno));
-        return -1;
-    }
-    return pid;
-}
+int handle_command(char **commands, int index) {
+    char filename[MAX_LENGTH];
 
 
+    sprintf(filename, "%d.out", getpid());
+    int fd_out = open(filename, O_RDWR | O_CREAT | O_APPEND, 0777);
+    FILE* out = fopen(filename, "a");
+    sprintf(filename, "%d.err", getpid());
+    int fd_err = open(filename, O_RDWR | O_CREAT | O_APPEND, 0777);
+    FILE* err = fopen(filename, "a");
 
-
-/**
-
-This function handles the SIGCHLD signal and cleans up the finished child processes
-Assumption: none
-Input parameters: an integer representing the signal number
-Returns: nothing
-**/
-void handle_signal(int sig)
-{
-    pid_t pid;
-    time_t finish;
-    int status;
-    struct nlist *np;
-
-    while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
-        np = lookup(pid);
-        if (np != NULL) {
-            finish = time(NULL);
-            np->finishtime = finish;
-            if (WIFEXITED(status))
-                printf("Finished child %d pid of parent %d at %ld\n", pid, getpid(), finish);
-            else if (WIFSIGNALED(status))
-                printf("Child %d pid of parent %d terminated by signal %d at %ld\n", pid, getpid(), WTERMSIG(status), finish);
-            /* handle child process that exceeds maximum runtime */
-            else if (difftime(finish, np->starttime) > MAXRUNTIME) {
-                printf("Child %d pid of parent %d exceeded maximum runtime at %ld\n", pid, getpid(), finish);
-                kill(pid, SIGKILL); /* terminate child process */
-                free(np->command); /* free memory */
-                free(np);
-                hashtab[hash(pid)] = NULL; /* remove from hash table */
-            }
-            /* remove entry from hash table for completed child process */
-            else {
-                free(np->command);
-                free(np);
-                hashtab[hash(pid)] = NULL;
-            }
-        }
-    }
-}
-
-
-
-/**
-This is the main function that reads commands from the user and spawns child processes to execute them
-Assumption: the user provides valid commands and arguments
-Input parameters: command line arguments
-Returns: an integer
-**/
-int main(int argc, char *argv[])
-{
-    char *line, *cmd;
-    char *args[MAXARGS];
-    int i, pid;
-    size_t len = 0;
-    ssize_t nread;
-    struct sigaction sa;
-
-    /* Set up signal handler for SIGCHLD */
-    sa.sa_handler = handle_signal;
-    sigemptyset(&sa.sa_mask);
-    sa.sa_flags = SA_RESTART;
-    if (sigaction(SIGCHLD, &sa, NULL) < 0) {
-        printf("sigaction error: %s\n", strerror(errno));
-        exit(1);
-    }
-
-    while (1) {
-        fflush(stdout);
-
-        /* Read a line from stdin */
-        if ((nread = getline(&line, &len, stdin)) == -1) {
-            if (errno == EINTR)
-                continue;
-            else
-                break;
-        }
-
-        /* Parse the line into a command and its arguments */
-        cmd = strtok(line, " \n");
-        for (i = 0; i < MAXARGS - 1 && cmd != NULL; i++) {
-            args[i] = cmd;
-            cmd = strtok(NULL, " \n");
-        }
-        args[i] = NULL;
-
-        /* Spawn a child process to execute the command */
-        if ((pid = spawn_child(args, i, time(NULL))) < 0) {
-            printf("spawn_child error: %s\n", strerror(errno));
-            exit(1);
-        }
-
-        /* Redirect output and error to <pid>.out and <pid>.err files */
-        char out_file[MAXLINE], err_file[MAXLINE];
-        sprintf(out_file, "%d.out", pid);
-        sprintf(err_file, "%d.err", pid);
-        int out_fd = open(out_file, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
-        int err_fd = open(err_file, O_WRONLY | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR);
-        if (out_fd < 0 || err_fd < 0) {
-            printf("open error: %s\n", strerror(errno));
-            exit(1);
-        }
-        dup2(out_fd, STDOUT_FILENO);
-        dup2(err_fd, STDERR_FILENO);
-        close(out_fd);
-        close(err_fd);
-    }
+    fprintf(out, "Starting command %d: child %d pid of parent %d\n", index, getpid(), getppid());
+    fflush(out);
+    char* command = strdup(commands[index]);
     
-sa.sa_handler = handle_signal;
-sigemptyset(&sa.sa_mask);
-sa.sa_flags = SA_RESTART | SA_NOCLDSTOP;
-if (sigaction(SIGCHLD, &sa, NULL) == -1) {
-    printf("sigaction error: %s\n", strerror(errno));
-    exit(1);
+    int length = strlen(command);
+    char **args = (char **)calloc(length, sizeof(char *));
+    int j = 0;
+    args[j++] = strtok(command, " ");
+
+    while((args[j++] = strtok(NULL, " ")) != NULL) { }
+
+    execvp(args[0], args);
+    fprintf(err, "Could not execute: %s\n", commands[index]);
+    return 2;
 }
 
-if (sigaction(SIGALRM, &sa, NULL) == -1) {
-    printf("sigaction error: %s\n", strerror(errno));
-    exit(1);
-}
+int main( int argc, char *argv[] ) {
+    
+    memset(hashtable,0,HASHSIZE*sizeof(struct nlist*));
 
-alarm(MAXRUNTIME + 1);
+    int pid;
 
+    int count = 0;
+    int size= 10;
 
-    /* Clean up */
-    free(line);
-    for (i = 0; i < HASHSIZE; i++) {
-        struct nlist *np = hashtab[i];
-        while (np != NULL) {
-            struct nlist *next = np->next;
-            free(np->command);
-            free(np);
-            np = next;
+    char** commands;
+    commands = (char**) malloc(size * sizeof(char*));
+    memset(commands, 0, size * sizeof(char*));
+
+    char fileName[MAX_LENGTH];
+
+    while(1) {
+
+        if(count >= size) {
+            size += 10;
+            commands = (char**) realloc(commands, size*sizeof(char *));
         }
+
+        char* input = (char*) malloc(MAX_LENGTH * sizeof(char));
+        memset(input, 0, MAX_LENGTH * sizeof(char));
+
+        if( fgets(input, MAX_LENGTH, stdin) == NULL) {
+            free(input);
+            break;
+        }
+
+        if (input[strlen(input) - 1] == '\n') {
+            input[strlen(input) - 1] = '\0';
+        }
+
+        commands[count] = input;
+        count++;  
+    }
+	
+	int i = 0;
+	while(i < count) {
+        time_t start = time(NULL);
+        pid = fork();
+        
+        if(pid < 0) {
+            return 1;
+        }
+
+        else if(pid == 0) {
+            break;
+        }
+        else {
+            struct nlist* hashnode = insert(pid);
+            hashnode->command = commands[i];
+            hashnode->index = ++i;
+            hashnode->start = start;
+        }
+    }
+
+    if(pid > 0) {
+        int pid, status;
+        
+        while ((pid = wait(&status)) > 0) {
+            time_t end = time(NULL);
+            struct nlist* node = lookup(pid);
+            node->finish = end;
+
+            sprintf(fileName, "%d.out", pid);
+            FILE* fd_out = fopen(fileName, "a");
+            sprintf(fileName, "%d.err", pid);
+            FILE* fd_err = fopen(fileName, "a");
+
+            if (WIFEXITED(status)) {
+                fprintf(fd_err, "Exited with exitcode = %d\n", WEXITSTATUS(status));
+            } else if (WIFSIGNALED(status)) {
+                fprintf(fd_err, "Killed with signal %d\n", WTERMSIG(status));  
+            }
+
+            fprintf(fd_err, "spawning too fast\n"); 
+            fprintf(fd_out, "Finished child %d pid of parent %d\n", pid, getpid());
+            fprintf(fd_out, "Finished at %ld, runtime duration %ld\n", node->finish, node->finish-node->start);
+            fclose(fd_out);
+            fclose(fd_err);
+
+
+            if(node->finish - node->start > 2) {
+                time_t start = time(NULL);
+                int pid2 = fork();
+                if(pid2 < 0) { return 1; }
+                if(pid2 == 0) {
+                    sprintf(fileName, "%d.out", getpid());
+                    FILE* fd_out = fopen(fileName, "a");
+                    sprintf(fileName, "%d.err", getpid());
+                    FILE* fd_err = fopen(fileName, "a");
+
+                    fprintf(fd_err, "RESTARTING\n"); 
+                    fprintf(fd_out, "RESTARTING\n");
+                    fclose(fd_out);
+                    fclose(fd_err);
+					return handle_command(commands, node->index);
+                }
+                else {
+                    struct nlist* tempNode = insert(pid2);
+                    tempNode->command = node->command;
+                    tempNode->index = node->index;
+                    tempNode->start = start;
+                }
+            }
+        }
+
+        for(int j = 0; j < count; j++) {
+            free(commands[j]);
+        }
+        free(commands);
+
+        for(int j = 0; j < HASHSIZE; j++) {
+            struct nlist* tempNode = hashtable[j];
+            while(tempNode != NULL) {
+                struct nlist* nextNode = tempNode->next;
+                free(tempNode);
+                tempNode = nextNode;
+            }
+            hashtable[j] = NULL;
+        }
+
+    }
+
+    else {
+        return handle_command(commands, i);
     }
 
     return 0;

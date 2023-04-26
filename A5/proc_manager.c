@@ -77,8 +77,11 @@ struct nlist *insert(int pid, char *command, int index, time_t start)
     unsigned hashval;
     if ((np = lookup(pid)) == NULL) { /* not found */
         np = (struct nlist *) malloc(sizeof(*np));
-        if (np == NULL || (np->command = strdup(command)) == NULL)
-            return NULL;
+        if (np == NULL || (np->command = strdup(command)) == NULL) {
+        	free(np->command);
+        	free(np);
+        	return NULL;
+       	}
         hashval = hash(pid);
         np->pid = pid;
         np->index = index;
@@ -98,8 +101,6 @@ Returns: the process ID of the new child process if successful, -1 if unsuccessf
 int spawn_child(char *argv[], int index, time_t start)
 {
     pid_t pid;
-    int stdout_fd, stderr_fd;
-
     if ((pid = fork()) < 0) {
         printf("fork error: %s\n", strerror(errno));
         return -1;
@@ -108,11 +109,9 @@ int spawn_child(char *argv[], int index, time_t start)
         char out_file[MAXLINE], err_file[MAXLINE];
         sprintf(out_file, "%d.out", getpid());
         sprintf(err_file, "%d.err", getpid());
-        stdout_fd = dup(STDOUT_FILENO);
-        stderr_fd = dup(STDERR_FILENO);
         freopen(out_file, "w", stdout);
         freopen(err_file, "w", stderr);
-        printf("Started child process with pid %d at %ld\n", pid, start);
+        printf("Started child process with pid %d at %ld\n", getpid(), start);
         execvp(argv[0], argv);
         /* if execvp returns, there was an error */
         printf("execvp error: %s\n", strerror(errno));
@@ -149,20 +148,27 @@ void handle_signal(int sig)
             finish = time(NULL);
             np->finishtime = finish;
             if (WIFEXITED(status))
-                printf("Finished child %d pid of parent %d\n", pid, getpid());
-            else
-                printf("Exited with exitcode = %d\n", WEXITSTATUS(status));
-            printf("Finished at %ld, runtime duration %ld\n", finish, finish - np->starttime);
-            if (finish - np->starttime > MAXRUNTIME) {
-                printf("Maximum runtime exceeded for child %d pid of parent %d\n", pid, getpid());
-                kill(pid, SIGKILL);
-            }	
-            free(np->command);
-            np->next = NULL;
-            free(np);
+                printf("Finished child %d pid of parent %d at %ld\n", pid, getpid(), finish);
+            else if (WIFSIGNALED(status))
+                printf("Child %d pid of parent %d terminated by signal %d at %ld\n", pid, getpid(), WTERMSIG(status), finish);
+            /* handle child process that exceeds maximum runtime */
+            else if (difftime(finish, np->starttime) > MAXRUNTIME) {
+                printf("Child %d pid of parent %d exceeded maximum runtime at %ld\n", pid, getpid(), finish);
+                kill(pid, SIGKILL); /* terminate child process */
+                free(np->command); /* free memory */
+                free(np);
+                hashtab[hash(pid)] = NULL; /* remove from hash table */
+            }
+            /* remove entry from hash table for completed child process */
+            else {
+                free(np->command);
+                free(np);
+                hashtab[hash(pid)] = NULL;
+            }
         }
     }
 }
+
 
 
 /**
@@ -190,7 +196,6 @@ int main(int argc, char *argv[])
     }
 
     while (1) {
-        printf("> ");
         fflush(stdout);
 
         /* Read a line from stdin */
@@ -230,6 +235,22 @@ int main(int argc, char *argv[])
         close(out_fd);
         close(err_fd);
     }
+    
+sa.sa_handler = handle_signal;
+sigemptyset(&sa.sa_mask);
+sa.sa_flags = SA_RESTART | SA_NOCLDSTOP;
+if (sigaction(SIGCHLD, &sa, NULL) == -1) {
+    printf("sigaction error: %s\n", strerror(errno));
+    exit(1);
+}
+
+if (sigaction(SIGALRM, &sa, NULL) == -1) {
+    printf("sigaction error: %s\n", strerror(errno));
+    exit(1);
+}
+
+alarm(MAXRUNTIME + 1);
+
 
     /* Clean up */
     free(line);

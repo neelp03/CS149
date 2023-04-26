@@ -6,7 +6,6 @@
  * Creation date: April 21, 2023
  **/
 
-
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -116,6 +115,13 @@ int handle_command(char **commands, int index) {
     return 0;
 }
 
+/**
+ * main() - 
+ * Assumption: None
+ * @param argc: The number of command-line arguments
+ * @param argv: An array of command-line argument strings
+ * Returns: 0 on successful execution, or 1 on error
+**/
 int main( int argc, char *argv[] ) {
     
     memset(hashtable,0,HASHSIZE*sizeof(struct nlist*));

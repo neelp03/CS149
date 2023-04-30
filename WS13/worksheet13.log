@@ -1,0 +1,25 @@
+    1  ls
+    2  mkdir filedir
+    3  touch filedir/tmp.txt filedir/tmp2.txt
+    4  ls filedir/
+    5  rsync -arv filedir/ filedir1/
+    6  cp -r filedir/ filedir2/
+    7  ls -latr filedir1
+    8  ls -latr filedir2
+    9  cd filedir1
+   10  ln
+   11  ln tmp.txt
+   12  ln tmp.txt tmp_link.txt
+   13  du 
+   14  du tmp_link.txt
+   15  df tmp.txt
+   16  df
+   17  find tmp_link.txt
+   18  stat
+   19  stat tmp_link.txt 
+   20  rm *
+   21  ls
+   22  history > ../WS13/worksheet13.log
+   
+   
+   Rsync command copies the whole directory the first time its being done, and then the next time instead of copying the whole directory again, it will only update the files that were modified. CP command doesnt do that, it will copy the whole directory again. 

@@ -1,3 +1,11 @@
+/**
+ * Description: Assignment 6 - Thread Manager
+ * Author names: Megan Ju, Neel Patel
+ * Author emails: megan.ju@sjsu.edu, neel.patel@sjsu.edu
+ * Last modified date: May 10, 2023
+ * Creation date: April 25, 2023
+ **/
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -25,6 +33,13 @@ THREADDATA* p = NULL;
 int logindex=0;
 int *logip = &logindex;
 
+/**
+ * Function: void logprint(char* message)
+ * Description: Prints a log message to the standard output with a timestamp.
+ * Parameters:
+ *     - message: The message to be logged
+ * Returns: None
+ **/
 void logprint(char* message) {
 
     int hours, minutes, seconds, day, month, year;
@@ -57,6 +72,13 @@ struct node {
 
 static struct node *hashtab[HASHSIZE]; 
 
+/**
+ * Function: unsigned hash(char* s)
+ * Description: Computes the hash value for a given string.
+ * Parameters:
+ *     - s: The input string
+ * Returns: The computed hash value
+ **/
 unsigned hash(char* s)
 {
     unsigned hashval;
@@ -67,6 +89,13 @@ unsigned hash(char* s)
     return hashval % HASHSIZE;
 }
 
+/**
+ * Function: struct node* lookup(char* name)
+ * Description: Looks up a name in the hash table and returns the corresponding node if found.
+ * Parameters:
+ *     - name: The name to be looked up
+ * Returns: The node containing the name if found, otherwise NULL
+ **/
 struct node *lookup(char* name)
 {
     struct node *np;
@@ -76,6 +105,13 @@ struct node *lookup(char* name)
     return NULL; 
 }
 
+/**
+ * Function: struct node* insert(char* name)
+ * Description: Inserts a name into the hash table if it doesn't already exist, or increments the count if it does.
+ * Parameters:
+ *     - name: The name to be inserted
+ * Returns: The inserted or updated node
+ **/
 struct node *insert(char* name)
 {
     struct node *np = NULL;
@@ -102,6 +138,13 @@ struct node *insert(char* name)
     return np;
 }
 
+/**
+ * Function: struct node* increment(char* name)
+ * Description: Increments the count for a given name. If the name doesn't exist, it is inserted into the hash table.
+ * Parameters:
+ *     - name: The name to be incremented
+ * Returns: The node corresponding to the incremented name
+ **/
 struct node* increment(char* name) {
     struct node* toInc = NULL;
     toInc = lookup(name);
@@ -117,6 +160,13 @@ struct node* increment(char* name) {
 
 }
 
+/**
+ * Function: void deleteList(struct node* head)
+ * Description: Deletes a linked list of nodes, freeing the memory allocated for each node.
+ * Parameters:
+ *     - head: The head node of the linked list
+ * Returns: None
+ **/
 void deleteList(struct node* head) {
     struct node* current = head;
     while(current != NULL) {
@@ -127,6 +177,13 @@ void deleteList(struct node* head) {
     }
 }
 
+/**
+ * Function: void printList(struct node* head)
+ * Description: Prints the contents of a linked list of nodes.
+ * Parameters:
+ *     - head: The head node of the linked list
+ * Returns: None
+ **/
 void printList(struct node* head) {
     struct node* current = head;
     while(current != NULL) {
@@ -138,27 +195,22 @@ void printList(struct node* head) {
 int main(int argc, char* argv[])
 {
     if(argc != 3) {
-        fprintf(stderr, "Program requires exactly two file names.\n");
+        fprintf(stderr, "need 2 files\n");
         pthread_exit(NULL);
     }
-
-    printf("==================== Log Messages ====================\n");
-
-    printf("create first thread\n");
+    printf("created thread 1\n");
     pthread_create(&tid1,NULL,thread_runner,argv[1]);
 
-    printf("create second thread\n");
+    printf("create thread 2\n");
     pthread_create(&tid2,NULL,thread_runner,argv[2]);
 
-    printf("wait for first thread to exit\n");
+    printf("waiting for thread 1\n");
     pthread_join(tid1,NULL);
-    printf("first thread exited\n");
+    printf("thread 1 finished\n");
 
-    printf("wait for second thread to exit\n");
+    printf("waiting for thread 2\n");
     pthread_join(tid2,NULL);
-    printf("second thread exited\n");
-
-    printf("==================== Name Counts ====================\n");
+    printf("thread 2 finished\n");
 
     for(int j = 0; j < HASHSIZE; j++) {
         printList(hashtab[j]);
@@ -169,36 +221,41 @@ int main(int argc, char* argv[])
     exit(0);
 }
 
+/**
+ * Function: void* thread_runner(void*)
+ * Description: Entry point for the threads. Reads the input file and increments the count for each name found in the file.
+ * Parameters:
+ *     - f: The input file name (passed as a void pointer)
+ * Returns: None
+ **/
 void* thread_runner(void* f)
 {
     char* filename = (char *) f;
-    pthread_t me;
+    pthread_t my_thread;
     char buffer[100];
-    me = pthread_self();
-    sprintf(buffer, "This is thread %ld (p=%p)",me,p);
+    my_thread = pthread_self();
+    sprintf(buffer, "This is thread %ld (p=%p)",my_thread,p);
     logprint(buffer);
 
     pthread_mutex_lock(&tlock_data); 
     if (p==NULL) {
         p = (THREADDATA*) malloc(sizeof(THREADDATA));
-        p->creator = me;
+        p->creator = my_thread;
     }
 
-    if (p != NULL && p->creator == me) {
-        sprintf(buffer, "This is thread %ld and I created THREADDATA %p",me,p);
+    if (p != NULL && p->creator == my_thread) {
+        sprintf(buffer, "Thread: %ld; THREADDATA: %p",my_thread,p);
         logprint(buffer);
     } else {
-        sprintf(buffer, "This is thread %ld and I can access the THREADDATA %p",me,p);
+        sprintf(buffer, "Thread: %ld; THREADDATA: %p",my_thread,p);
         logprint(buffer);
     }
     pthread_mutex_unlock(&tlock_data); 
 
     FILE* inFile = fopen(filename, "r");
-    sprintf(buffer, "opened file %s", filename);
     logprint(buffer);
 
     if(!inFile) {
-        sprintf(buffer, "range: cannot open file\n");
         logprint(buffer);       
         pthread_exit(NULL);
     }
@@ -238,13 +295,13 @@ void* thread_runner(void* f)
     fclose(inFile);
 
     pthread_mutex_lock(&tlock_data);
-    if (p!=NULL && p->creator==me) {
-        sprintf(buffer, "This is thread %ld and I delete THREADDATA",me);
+    if (p!=NULL && p->creator==my_thread) {
+        sprintf(buffer, "Thread: %ld; THREADDATA: %p",my_thread, p);
         logprint(buffer);     
         free(p);
         p = NULL;
     } else {
-        sprintf(buffer, "This is thread %ld and I can access the THREADDATA",me);
+        sprintf(buffer, "Thread: %ld; THREADDATA: %p",my_thread, p);
         logprint(buffer);    
     }
     pthread_mutex_unlock(&tlock_data);

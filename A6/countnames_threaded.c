@@ -198,6 +198,7 @@ int main(int argc, char* argv[])
         fprintf(stderr, "need 2 files\n");
         pthread_exit(NULL);
     }
+    printf("-------- LOG MESSAGES ---------");
     printf("created thread 1\n");
     pthread_create(&tid1,NULL,thread_runner,argv[1]);
 
@@ -212,6 +213,7 @@ int main(int argc, char* argv[])
     pthread_join(tid2,NULL);
     printf("thread 2 finished\n");
 
+    printf("-------- Name Counts ---------");
     for(int j = 0; j < HASHSIZE; j++) {
         printList(hashtab[j]);
         deleteList(hashtab[j]);
